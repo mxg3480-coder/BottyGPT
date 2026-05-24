@@ -1,18 +1,17 @@
 # BottyGPT Web Interface
 from flask import Flask, render_template_string, request, jsonify
 import os
-
-app = Flask(__name__)
-
-# Load the chatbot logic
 import re
 import random
 import json
+import time
+import requests
 from datetime import datetime
 
 class BottyGPT:
     def __init__(self):
         self.name = "BottyGPT"
+        self.firecrawl_key = "fc-8347448937d14a6abb51f26ae6217766"
         self.memory = {}
         self.user_name = None
         self.mood = "neutral"
@@ -89,6 +88,53 @@ class BottyGPT:
                 return f"You told me that {key} is {value}."
         return None
 
+    def search_web(self, query):
+        """Search the web using Firecrawl AI"""
+        try:
+            url = f"https://api.firecrawl.dev/v0/search"
+            headers = {
+                "Authorization": f"Bearer {self.firecrawl_key}",
+                "Content-Type": "application/json"
+            }
+            data = {
+                "query": query,
+                "limit": 3
+            }
+            response = requests.post(url, headers=headers, json=data, timeout=10)
+            if response.status_code == 200:
+                result = response.json()
+                if result.get("success") and result.get("data"):
+                    entries = result["data"]
+                    summary = f"I found some information about '{query}':\n\n"
+                    for entry in entries[:3]:
+                        title = entry.get("title", "No title")
+                        description = entry.get("description", "No description")
+                        summary += f"• **{title}**\n  {description}\n\n"
+                    return summary.strip()
+            return None
+        except Exception as e:
+            return None
+
+    def scrape_url(self, url):
+        """Scrape a specific URL using Firecrawl"""
+        try:
+            api_url = f"https://api.firecrawl.dev/v0/scrape"
+            headers = {
+                "Authorization": f"Bearer {self.firecrawl_key}",
+                "Content-Type": "application/json"
+            }
+            data = {"url": url}
+            response = requests.post(api_url, headers=headers, json=data, timeout=15)
+            if response.status_code == 200:
+                result = response.json()
+                if result.get("success") and result.get("data"):
+                    content = result["data"].get("content", "")
+                    if content:
+                        return content[:2000] + "..." if len(content) > 2000 else content
+            return None
+        except:
+            return None
+
     def chatbot_response(self, user_input):
         text = user_input.lower()
         self.conversation_history.append({"time": str(datetime.now()), "user": user_input})
@@ -102,6 +148,19 @@ class BottyGPT:
         if math_answer := self.math_solver(text): return math_answer
         if learned := self.learn_fact(text): self.save_memory(); return learned
         if recalled := self.recall_fact(text): return recalled
+
+        # Web search triggers
+        search_triggers = ["search", "look up", "find", "google", "browse", "web search"]
+        if any(trigger in text for trigger in search_triggers):
+            query = text
+            for trigger in search_triggers:
+                query = query.replace(trigger, "")
+            query = query.strip()
+            if query:
+                search_result = self.search_web(query)
+                if search_result:
+                    return search_result
+                return f"I tried searching for '{query}' but couldn't find any results."
 
         if any(word in text for word in ["hello", "hi", "hey"]):
             return random.choice(self.greetings) + (f" {self.user_name}!" if self.user_name else "!")
@@ -122,7 +181,7 @@ class BottyGPT:
         if "story" in text: return "In the year 2145, an AI woke up in a forgotten satellite... 'Are humans still dreaming?'"
         if "motivate me" in text: return "Every expert started as a beginner. Keep building!"
         if "ai" in text: return "AI teaches computers to recognize patterns, reason, and respond intelligently."
-        if "help" in text: return "Ask me about jokes, facts, stories, math, time, or just chat!"
+        if "help" in text: return "Ask me about jokes, facts, stories, math, time, or just chat! You can also say 'search for [topic]' to look up information on the web!"
         
         if len(text.split()) <= 2:
             return random.choice(["Interesting.", "Go on.", "Tell me more.", "I'm listening.", "Cool."])
