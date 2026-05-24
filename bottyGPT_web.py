@@ -184,11 +184,24 @@ class BottyGPT:
         if "help" in text: return "Ask me about jokes, facts, stories, math, time, or just chat! You can also say 'search for [topic]' to look up information on the web!"
         
         if len(text.split()) <= 2:
-            return random.choice(["Interesting.", "Go on.", "Tell me more.", "I'm listening.", "Cool."])
+            short_response = random.choice(["Interesting.", "Go on.", "Tell me more.", "I'm listening.", "Cool."])
+            # Auto-search for short messages that might be questions
+            if text.strip().endswith("?") or any(word in text for word in ["what", "who", "where", "when", "why", "how"]):
+                search_result = self.search_web(text.strip().replace("?", ""))
+                if search_result:
+                    return search_result
+            return short_response
         
         starters = ["Interesting thought.", "That's actually cool.", "Hmm...", "Let me think.", "That has potential."]
         endings = ["Tell me more.", "I want to hear your ideas.", "That's pretty smart.", "Now that's interesting."]
-        return random.choice(starters) + " " + random.choice(endings)
+        
+        # Use web search as automatic fallback for unknown topics
+        fallback_response = random.choice(starters) + " " + random.choice(endings)
+        search_result = self.search_web(text)
+        if search_result:
+            return search_result
+        
+        return fallback_response
 
 bot = BottyGPT()
 
